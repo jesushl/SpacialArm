@@ -28,9 +28,9 @@ print('u : {}'.format(u))
 v = np.linspace(-0.5, 0.5, endpoint=True, num=10)
 print('v : {}'.format(v))
 u, v = np.meshgrid(u, v)
-print('meshgrid u v  \n{0}  {2} {1}'.format(u,v, '\n* \n' * 30))
+#print('meshgrid u v  \n{0}  {2} {1}'.format(u,v, '{0}{1}{2}'.format('\n', '*' * 30, '\n')))
 u, v = u.flatten(), v.flatten()
-
+print('flatten u, v \n{0} {2} {1}'.format(u,v, '{0}{1}{2}'.format('\n', '*'*30, '\n')))
 # This is the Mobius mapping, taking a u, v pair and returning an x, y, z
 # triple
 x = (1 + 0.5 * v * np.cos(u / 2.0)) * np.cos(u)
