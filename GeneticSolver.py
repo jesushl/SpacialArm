@@ -41,9 +41,9 @@ class GeneticSolver():
     def generateNewGenGeneration(self, newIndividualsNum):
         litter      = []
         for element in range(newIndividualsNum):
-            tetha = self.generateRandomAngle()
+            theta = self.generateRandomAngle()
             gama  = self.generateRandomAngle()
-            litter.append( ( tetha, gama ) )
+            litter.append( {'theta' : theta, 'gama' :  gama } ) 
         return litter
 
     def mixBestSpecimens(self, groupA, groupB):

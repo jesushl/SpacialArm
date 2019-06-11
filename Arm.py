@@ -23,9 +23,9 @@ class Arm():
     #Actualizations using dictionaries
     # {'gama' : <num>, 'tetha' : <num>}
     def actualizeArm(self, vector1Act, vector2Act, vector3Act):
-        self.modifyArticulation(self.vector1, vector1Act[gama], vector1Act[tetha], self.armCore)
-        self.modifyArticulation(self.vector2, vector2Act[gama], vector2Act[tetha], self.getIPointsFromParentVector(self.vector1))
-        self.modifyArticulation(self.vector3, vector3Act[gama], vector3Act[tetha], self.getIPointsFromParentVector(self.vector2))
+        self.modifyArticulation(self.vector1, vector1Act['gama'], vector1Act['theta'], self.armCore)
+        self.modifyArticulation(self.vector2, vector2Act['gama'], vector2Act['theta'], self.getIPointsFromParentVector(self.vector1))
+        self.modifyArticulation(self.vector3, vector3Act['gama'], vector3Act['theta'], self.getIPointsFromParentVector(self.vector2))
 
     def getArmFinalPoint(self):
         return (self.vector3.x , self.vector3.y, self.vector3.z)
