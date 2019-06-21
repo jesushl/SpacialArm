@@ -28,7 +28,7 @@ class Arm():
         self.modifyArticulation(self.vector3, vector3Act['gama'], vector3Act['theta'], self.getIPointsFromParentVector(self.vector2))
 
     def getArmFinalPoint(self):
-        return (self.vector3.x , self.vector3.y, self.vector3.z)
+        return { 'x': self.vector3.x , 'y' : self.vector3.y, 'z' : self.vector3.z}
 
     def getIPointsFromParentVector(self, parentVector):
         return {'x': parentVector.x, 'y' : parentVector.y, 'z' : parentVector.z}

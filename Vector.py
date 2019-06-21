@@ -28,7 +28,7 @@ class Vector():
         distance   =   math.sqrt(((x - x0) ** 2) + ((y - y0) ** 2) + ((z - z0) ** 2))
         return distance
 
-    def modifyTheta(self, thetha):
+    def modifyTheta(self, theta):
         self.x      =   self.lenght  * math.cos(theta)  + self.x0
         self.y      =   self.lenght  * math.sin(theta)  + self.y0
 
