@@ -20,6 +20,7 @@ class GeneticSolver():
         mutantAngle     = self.generateRandomAngle()
         return self.crossAngles(angle, mutantAngle, mutations, False)
 
+
     def crossAngles(self, angleP, angleM, modifications, replacement = True):
         modifiedGens = set()
         anglePL = list('{0:08b}'.format(angleP))

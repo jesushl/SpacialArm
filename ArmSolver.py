@@ -19,7 +19,7 @@ class ArmSolver():
         family2 = self.getNewGeneration(familyPopulation)
         #New generation combined can have mutations in a grade of 10% of cases
         for generation in range(generations):
-            solution = existASolution( family1, family2 )
+            solution = self.existASolution( family1, family2 ) #TOOD
             if not solution:
                 family1  = self.newGenerationCombined(family1, family2)
                 family2  = self.mutantAddition(family1, family2)
@@ -28,9 +28,28 @@ class ArmSolver():
             else:
                 return solution
 
+    #MutantAddition generates mutants by each family and only choose the
+    #the most capable mutants, probably some mutants are superior of
+    # current families or worst ...
     def mutantAddition(self, family1, family2):
-        nGeneration     = self.getNewGeneration()
-        b
+        for familyMember1, familyMember2 in zip(family1, family2): ##Moving on arm evaluations
+            mutant1 = {}
+            mutant2 = {}
+            #{'arm1' : {'gama' : <>, 'theta' : <>}}
+            for armM1, armM2 in zip(family1[familyMember1][0], family2[familyMember2][0]):
+                mutantArm1  = self.mutantArm(family1[familyMember1][0][armM1])
+                mutantArm2  = self.mutantArm(family2[familyMember2][0][armM2])
+
+            eval1       = self.evaluateAnglesGroup(mutantArm1['arm1'])
+            eval2       = self.evaluateAnglesGroup()
+
+    def mutantArm(self, armObject):
+        nArm    = {}
+        for armKey in armObject:
+            nGama   = self.gs.mutantAngle(armObject[armKey]['gama'], 180)## Z angle
+            nTheta  = self.gs.mutantAngle(armObject[armKey]['theta'])
+            nArm.update( { armKey : { 'gama' : nGama , 'theta' : nTheta } } )
+        return nArm
 
     def newGenerationCombined(self, family1, family2):
         bestIndividuals = {}
