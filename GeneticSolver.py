@@ -23,8 +23,9 @@ class GeneticSolver():
 
     def crossAngles(self, angleP, angleM, modifications, replacement = True):
         modifiedGens = set()
-        anglePL = list('{0:08b}'.format(angleP))
-        angleML = list('{0:08b}'.format(angleM))
+        anglePL = list('{0:09b}'.format(angleP))
+        angleML = list('{0:09b}'.format(angleM))
+        #print('angle Parent {2} :  {0}   ange Mother {3} : {1}'.format(anglePL, angleML, angleP, angleM))
         for modificationCicle in range (modifications):
             randomGenModification = random.randint(0, len(anglePL) - 1)
             if not replacement:

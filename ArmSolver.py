@@ -6,6 +6,8 @@ from Arm            import Arm
 class ArmSolver():
 
     def __init__(self, arm1Len = 3, arm2Len = 2, arm3Len = 1, goalPoint = {'x' :1, 'y' : 1 , 'z' : 1 }):
+
+        self.exactitudeParams = (0.05)
         self.arm        =  Arm(arm1Len, arm2Len, arm3Len)
         self.goalPoint  =  goalPoint
         self.gs         =  GeneticSolver(arm1Len, arm2Len, arm3Len, goalPoint)
@@ -19,47 +21,104 @@ class ArmSolver():
         family2 = self.getNewGeneration(familyPopulation)
         #New generation combined can have mutations in a grade of 10% of cases
         for generation in range(generations):
+            print('Generation : {}'.format(generation))
             solution = self.existASolution( family1, family2 ) #TOOD
             if not solution:
-                family1  = self.newGenerationCombined(family1, family2)
-                family2  = self.mutantAddition(family1, family2)
+                family1  = self.newGenerationCombined(family1, family2, familyPopulation)
+                #print('Family 2 : {}'.format(family2))
+                family2  = self.mutantAddition(family2, family1)
+                #print('Mutation! : {}'.format(family2))
                 if ( generation % 5 ) == 0 :
-                    family2 = self.newIndividualsAddition()
+                    #print(' $$$$$$$$$$$$$ New generation random addition')
+                    family2 = self.newIndividualsAddition(family2, familyPopulation)
             else:
+                print(solution)
                 return solution
+
+    def newIndividualsAddition(self, family, familyPopulation):
+        keys                = sorted(family.keys())
+        preservedMembers    = int(familyPopulation / 2)
+        bestResults         = keys[:preservedMembers]
+        newMembers          = self.getNewGeneration(familyPopulation)
+        return self.newGenerationCombined(family, newMembers, familyPopulation)
+
+
+
+    ##Exactitude params for a satisfactory solution
+    def existASolution(self, family1, family2):
+        listResults     = list(family1.keys()) + list(family2.keys())
+        #print(listResults)
+        results         =  sorted(listResults)
+
+        print('Aproximacion : {}'.format(results[0]))
+        if results[0] < self.exactitudeParams and results[0] > self.exactitudeParams * -1:
+            if results[0] in family1:
+                return family1[results[0]]
+            else :
+                return family2[results[0]]
+        return False
 
     #MutantAddition generates mutants by each family and only choose the
     #the most capable mutants, probably some mutants are superior of
     # current families or worst ...
-    def mutantAddition(self, family1, family2):
-        for familyMember1, familyMember2 in zip(family1, family2): ##Moving on arm evaluations
+    def mutantAddition(self, familyReceiber, familyColaborative):
+        mutantGeneration = {}
+        #print('Mutant Addition')
+        #print('family Receiber : {}'.format(familyReceiber))
+        #print('family Colaborative : {}'.format(familyColaborative))
+        for familyMember1, familyMember2 in zip(familyReceiber, familyColaborative): ##Moving on arm evaluations
             mutant1 = {}
             mutant2 = {}
             #{'arm1' : {'gama' : <>, 'theta' : <>}}
-            for armM1, armM2 in zip(family1[familyMember1][0], family2[familyMember2][0]):
-                mutantArm1  = self.mutantArm(family1[familyMember1][0][armM1])
-                mutantArm2  = self.mutantArm(family2[familyMember2][0][armM2])
-
-            eval1       = self.evaluateAnglesGroup(mutantArm1['arm1'])
-            eval2       = self.evaluateAnglesGroup()
+            for armM1, armM2 in zip(familyReceiber[familyMember1][0], familyColaborative[familyMember2][0]):
+                mutantArm1  = self.mutantArm(familyReceiber[familyMember1][0][armM1])
+                mutantArm2  = self.mutantArm(familyColaborative[familyMember2][0][armM2])
+                mutant1.update({ armM1   : mutantArm1 })
+                mutant2.update({ armM2   : mutantArm2 })
+            #print('mutant1 : {}'.format(mutant1))
+            eval1       = self.evaluateAnglesGroup(mutant1['arm1'], mutant1['arm2'], mutant1['arm2'])
+            eval2       = self.evaluateAnglesGroup(mutant2['arm1'], mutant2['arm2'], mutant2['arm2'])
+            mutantGeneration.update({ eval1 : mutant1 })
+            mutantGeneration.update({ eval2 : mutant2 })
+        bestMutants                 = sorted(mutantGeneration.keys())
+        bestFamilyOriginals         = sorted(familyReceiber.keys())
+        receiberFamilyNumMembers    = len(familyReceiber.keys())
+        familyPreservedMembers      = int(receiberFamilyNumMembers / 2)
+        newReceptorFamily   = {}
+        familyMemberIndex   = 0
+        mutantElementIndex  = 0
+        for member in range(0, receiberFamilyNumMembers):
+            if member < familyPreservedMembers:
+                #print('Best familie members {}'.format(familyReceiber[bestFamilyOriginals[familyMemberIndex]]))
+                newReceptorFamily.update({bestFamilyOriginals[familyMemberIndex] : familyReceiber[bestFamilyOriginals[familyMemberIndex]]})
+                familyMemberIndex       =  familyMemberIndex + 1
+            else :
+                #print('Best mutants : {}'.format(bestMutants))
+                newReceptorFamily.update({bestMutants[mutantElementIndex] : [mutantGeneration[bestMutants[mutantElementIndex]]]})
+                #print('Best Mutant additions : {}'.format({bestMutants[mutantElementIndex] : [mutantGeneration[bestMutants[mutantElementIndex]]]}))
+                mutantElementIndex      = mutantElementIndex + 1
+        familyReceiber  = newReceptorFamily
+        return familyReceiber
 
     def mutantArm(self, armObject):
         nArm    = {}
-        for armKey in armObject:
-            nGama   = self.gs.mutantAngle(armObject[armKey]['gama'], 180)## Z angle
-            nTheta  = self.gs.mutantAngle(armObject[armKey]['theta'])
-            nArm.update( { armKey : { 'gama' : nGama , 'theta' : nTheta } } )
+        nGama   = self.gs.mutantAngle(armObject['gama'], 180)## Z angle
+        nTheta  = self.gs.mutantAngle(armObject['theta'])
+        nArm.update( { 'gama' : nGama , 'theta' : nTheta }  )
         return nArm
 
-    def newGenerationCombined(self, family1, family2):
+    def newGenerationCombined(self, family1, family2, familyPopulation):
         bestIndividuals = {}
         allKeys         = list(family1.keys()) + list(family2.keys())
-        sortedBestKeys  = sorted(allKeys)[:-10]
+        sortedBestKeys  = sorted(allKeys)
+        familyMembers   = 0
         for bestKey in sortedBestKeys:
             if bestKey in family1:
                 bestIndividuals.update( { bestKey : family1[bestKey]  } )
             else:
                 bestIndividuals.update( { bestKey : family2[bestKey] } )
+            if familyMembers >= familyPopulation:
+                break
         return bestIndividuals
 
 
@@ -128,10 +187,6 @@ class ArmSolver():
 
 
 if __name__ == '__main__' :
-    ars =  ArmSolver()
-    gen1 = ars.getNewGeneration()
-    print('gen1 : {}'.format(gen1.keys()))
-    gen2 = ars.getNewGeneration()
-    print('gen2 : {}'.format(gen2.keys()))
-    #print( ars.newGenerationCombined( gen1, gen2 ) )
-    print('Combinatory : {}'.format(ars.newGenerationCombined( gen1, gen2 ).keys()))
+    goalPoint   = {'x' : 2, 'y' :  1, 'z' : 2 }
+    ars         = ArmSolver(goalPoint = goalPoint)
+    ars.getGeneticResult(generations = 1000)
