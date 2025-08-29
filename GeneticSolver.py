@@ -31,7 +31,7 @@ class GeneticSolver():
             if not replacement:
                 if randomGenModification in modifiedGens:
                     while randomGenModification in modifiedGens:
-                        randomGenModification = random.randint(0, len(anglePStr)- 1)
+                        randomGenModification = random.randint(0, len(anglePL) - 1)
                     modifiedGens.add(randomGenModification)
             anglePL[randomGenModification] =  angleML[randomGenModification]
         return int( ''.join( anglePL ), 2 )
@@ -50,10 +50,10 @@ class GeneticSolver():
 
     def mixBestSpecimens(self, groupA, groupB):
         childGeneration = []
-        for elementInA, elementInB in groupA, groupB:
+        for elementInA, elementInB in zip(groupA, groupB):
             nElementTheta = self.crossAngles( elementInA['theta'], elementInB['theta'], 4)
             nElementGama  = self.crossAngles( elementInA['gama'],  elementInB['gama'],  4)
-            childGeneration.append((nElementTheta, nElementGama))
+            childGeneration.append({'theta': nElementTheta, 'gama': nElementGama})
         return childGeneration
 
 

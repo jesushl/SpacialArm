@@ -1,23 +1,226 @@
 #!/usr/bin/env python3
 """
-Interfaz principal para el visualizador 3D del brazo robótico
-Distribución 5:3 - Visualización del brazo con prioridad
+Ventana independiente para visualización 3D del brazo robótico
 """
 
 import sys
 import os
+import numpy as np
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, 
                              QWidget, QPushButton, QLabel, QSlider, QGroupBox, 
-                             QGridLayout, QLineEdit, QMessageBox, QSplitter)
+                             QGridLayout, QLineEdit, QMessageBox)
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QThread
 from PyQt5.QtGui import QFont
+import OpenGL.GL as gl
+import OpenGL.GLU as glu
+from PyQt5.QtOpenGL import QOpenGLWidget
 
 # Agregar el directorio padre al path para importar los módulos del proyecto
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from glWidget import ArmGLWidget
 from Arm import Arm
 from ImprovedGeneticSolver import ImprovedGeneticSolver
+
+class ArmGLWidget(QOpenGLWidget):
+    """Widget OpenGL para renderizar el brazo robótico"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.arm = None
+        self.rotation_x = 0
+        self.rotation_y = 0
+        self.zoom = -15
+        self.last_pos = None
+        self.target_point = None
+        
+        # Timer para actualización continua
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.update)
+        self.timer.start(16)  # ~60 FPS
+        
+        # Configurar el widget
+        self.setFocusPolicy(Qt.StrongFocus)
+        self.setMinimumSize(600, 400)
+        
+    def set_arm(self, arm):
+        """Establecer el brazo a visualizar"""
+        self.arm = arm
+        self.update()
+        
+    def set_target_point(self, x, y, z):
+        """Establecer punto objetivo para visualizar"""
+        self.target_point = (x, y, z)
+        self.update()
+        
+    def initializeGL(self):
+        """Inicializar OpenGL"""
+        gl.glClearColor(0.1, 0.1, 0.1, 1.0)
+        gl.glEnable(gl.GL_DEPTH_TEST)
+        gl.glEnable(gl.GL_LIGHTING)
+        gl.glEnable(gl.GL_LIGHT0)
+        gl.glEnable(gl.GL_COLOR_MATERIAL)
+        gl.glLightfv(gl.GL_LIGHT0, gl.GL_POSITION, [1, 1, 1, 0])
+        gl.glLightfv(gl.GL_LIGHT0, gl.GL_AMBIENT, [0.2, 0.2, 0.2, 1])
+        gl.glLightfv(gl.GL_LIGHT0, gl.GL_DIFFUSE, [0.8, 0.8, 0.8, 1])
+        
+    def resizeGL(self, width, height):
+        """Manejar cambio de tamaño"""
+        gl.glViewport(0, 0, width, height)
+        gl.glMatrixMode(gl.GL_PROJECTION)
+        gl.glLoadIdentity()
+        glu.gluPerspective(45, width / height, 0.1, 100.0)
+        gl.glMatrixMode(gl.GL_MODELVIEW)
+        
+    def paintGL(self):
+        """Renderizar la escena"""
+        gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
+        gl.glLoadIdentity()
+        
+        # Posicionar cámara
+        gl.glTranslatef(0.0, 0.0, self.zoom)
+        gl.glRotatef(self.rotation_x, 1.0, 0.0, 0.0)
+        gl.glRotatef(self.rotation_y, 0.0, 1.0, 0.0)
+        
+        # Dibujar ejes de coordenadas
+        self.draw_coordinate_axes()
+        
+        # Dibujar brazo si existe
+        if self.arm:
+            self.draw_arm()
+            
+        # Dibujar punto objetivo si existe
+        if self.target_point:
+            self.draw_target_point()
+            
+    def draw_coordinate_axes(self):
+        """Dibujar ejes de coordenadas"""
+        gl.glDisable(gl.GL_LIGHTING)
+        gl.glBegin(gl.GL_LINES)
+        
+        # Eje X (rojo)
+        gl.glColor3f(1.0, 0.0, 0.0)
+        gl.glVertex3f(0, 0, 0)
+        gl.glVertex3f(5, 0, 0)
+        
+        # Eje Y (verde)
+        gl.glColor3f(0.0, 1.0, 0.0)
+        gl.glVertex3f(0, 0, 0)
+        gl.glVertex3f(0, 5, 0)
+        
+        # Eje Z (azul)
+        gl.glColor3f(0.0, 0.0, 1.0)
+        gl.glVertex3f(0, 0, 0)
+        gl.glVertex3f(0, 0, 5)
+        
+        gl.glEnd()
+        gl.glEnable(gl.GL_LIGHTING)
+        
+    def draw_arm(self):
+        """Dibujar el brazo robótico"""
+        if not self.arm:
+            return
+            
+        # Obtener puntos del brazo
+        arm_points = self.arm.getArmPoints()
+        
+        if not arm_points:
+            return
+            
+        # Dibujar base
+        gl.glColor3f(0.5, 0.5, 0.5)
+        self.draw_sphere(0, 0, 0, 0.3)
+        
+        # Dibujar segmentos del brazo
+        for i, point in enumerate(arm_points):
+            if i == 0:
+                # Primer segmento desde la base
+                prev_point = (0, 0, 0)
+            else:
+                prev_point = arm_points[i-1]
+                
+            # Dibujar segmento
+            gl.glColor3f(0.2, 0.6, 1.0)
+            self.draw_segment(prev_point, point)
+            
+            # Dibujar articulación
+            gl.glColor3f(1.0, 0.8, 0.0)
+            self.draw_sphere(point[0], point[1], point[2], 0.2)
+            
+        # Dibujar efector final
+        final_point = self.arm.getArmFinalPoint()
+        gl.glColor3f(1.0, 0.0, 0.0)
+        self.draw_sphere(final_point['x'], final_point['y'], final_point['z'], 0.25)
+        
+    def draw_segment(self, start, end):
+        """Dibujar un segmento del brazo"""
+        gl.glDisable(gl.GL_LIGHTING)
+        gl.glBegin(gl.GL_LINES)
+        gl.glVertex3f(start[0], start[1], start[2])
+        gl.glVertex3f(end[0], end[1], end[2])
+        gl.glEnd()
+        gl.glEnable(gl.GL_LIGHTING)
+        
+    def draw_sphere(self, x, y, z, radius):
+        """Dibujar una esfera en la posición especificada"""
+        gl.glPushMatrix()
+        gl.glTranslatef(x, y, z)
+        quad = glu.gluNewQuadric()
+        glu.gluSphere(quad, radius, 16, 16)
+        glu.gluDeleteQuadric(quad)
+        gl.glPopMatrix()
+        
+    def draw_target_point(self):
+        """Dibujar punto objetivo"""
+        if not self.target_point:
+            return
+            
+        x, y, z = self.target_point
+        gl.glColor3f(0.0, 1.0, 0.0)
+        self.draw_sphere(x, y, z, 0.3)
+        
+        # Dibujar línea punteada desde el origen
+        gl.glDisable(gl.GL_LIGHTING)
+        gl.glEnable(gl.GL_LINE_STIPPLE)
+        gl.glLineStipple(2, 0xAAAA)
+        gl.glBegin(gl.GL_LINES)
+        gl.glVertex3f(0, 0, 0)
+        gl.glVertex3f(x, y, z)
+        gl.glEnd()
+        gl.glDisable(gl.GL_LINE_STIPPLE)
+        gl.glEnable(gl.GL_LIGHTING)
+        
+    def mousePressEvent(self, event):
+        """Manejar clic del mouse"""
+        self.last_pos = event.pos()
+        
+    def mouseMoveEvent(self, event):
+        """Manejar movimiento del mouse"""
+        if self.last_pos is None:
+            return
+            
+        dx = event.x() - self.last_pos.x()
+        dy = event.y() - self.last_pos.y()
+        
+        if event.buttons() & Qt.LeftButton:
+            self.rotation_y += dx
+            self.rotation_x += dy
+            self.update()
+            
+        self.last_pos = event.pos()
+        
+    def wheelEvent(self, event):
+        """Manejar rueda del mouse para zoom"""
+        delta = event.angleDelta().y()
+        self.zoom += delta / 120.0
+        self.zoom = max(-30, min(-5, self.zoom))
+        self.update()
+        
+    def reset_view(self):
+        """Resetear vista a posición inicial"""
+        self.rotation_x = 0
+        self.rotation_y = 0
+        self.zoom = -15
+        self.update()
 
 class AnimationThread(QThread):
     """Thread para ejecutar el algoritmo genético sin bloquear la UI"""
@@ -44,8 +247,8 @@ class AnimationThread(QThread):
         except Exception as e:
             self.error.emit(f"Error en algoritmo genético: {str(e)}")
 
-class ArmWindow(QMainWindow):
-    """Ventana principal con distribución 5:3 - Visualización prioritaria"""
+class ArmVisualizerWindow(QMainWindow):
+    """Ventana principal para visualización del brazo"""
     
     def __init__(self):
         super().__init__()
@@ -55,126 +258,34 @@ class ArmWindow(QMainWindow):
         self.init_arm()
         
     def init_ui(self):
-        """Inicializar interfaz de usuario con distribución 5:3"""
+        """Inicializar interfaz de usuario"""
         self.setWindowTitle("Visualizador 3D del Brazo Robótico - SpacialArm")
-        self.setGeometry(100, 100, 1600, 1000)
+        self.setGeometry(100, 100, 1400, 900)
         
         # Widget central
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         
-        # Layout principal con distribución 5:3
+        # Layout principal
         main_layout = QVBoxLayout(central_widget)
-        main_layout.setContentsMargins(10, 10, 10, 10)
-        main_layout.setSpacing(10)
         
-        # Splitter para distribución 5:3
-        splitter = QSplitter(Qt.Vertical)
-        main_layout.addWidget(splitter)
-        
-        # ===== SECCIÓN SUPERIOR (5/8) - VISUALIZACIÓN =====
-        visualization_widget = QWidget()
-        visualization_layout = QVBoxLayout(visualization_widget)
-        visualization_layout.setContentsMargins(0, 0, 0, 0)
-        
-        # Título de la sección de visualización
-        title_label = QLabel("🎯 Visualización 3D del Brazo Robótico")
-        title_label.setAlignment(Qt.AlignCenter)
-        title_label.setFont(QFont("Arial", 16, QFont.Bold))
-        title_label.setStyleSheet("""
-            QLabel {
-                color: #2c3e50;
-                background-color: #ecf0f1;
-                padding: 10px;
-                border-radius: 5px;
-                border: 2px solid #bdc3c7;
-            }
-        """)
-        visualization_layout.addWidget(title_label)
-        
-        # Widget OpenGL para visualización (prioridad máxima)
+        # Widget OpenGL para visualización
         self.gl_widget = ArmGLWidget()
-        self.gl_widget.setMinimumSize(800, 600)
-        visualization_layout.addWidget(self.gl_widget)
+        main_layout.addWidget(self.gl_widget)
         
-        # Agregar al splitter con proporción 5
-        splitter.addWidget(visualization_widget)
-        splitter.setSizes([625, 375])  # 5:3 ratio (1000 total)
-        
-        # ===== SECCIÓN INFERIOR (3/8) - CONTROLES =====
-        controls_widget = QWidget()
-        controls_layout = QHBoxLayout(controls_widget)
-        controls_layout.setContentsMargins(0, 0, 0, 0)
-        controls_layout.setSpacing(15)
+        # Layout para controles
+        controls_layout = QHBoxLayout()
+        main_layout.addLayout(controls_layout)
         
         # Grupo: Punto Objetivo
-        target_group = self.create_target_group()
-        controls_layout.addWidget(target_group)
-        
-        # Grupo: Control de Ángulos
-        angle_group = self.create_angle_group()
-        controls_layout.addWidget(angle_group)
-        
-        # Grupo: Información
-        info_group = self.create_info_group()
-        controls_layout.addWidget(info_group)
-        
-        # Agregar al splitter con proporción 3
-        splitter.addWidget(controls_widget)
-        
-        # Configurar el splitter para mantener proporción 5:3
-        splitter.setStretchFactor(0, 5)  # Visualización
-        splitter.setStretchFactor(1, 3)  # Controles
-        
-    def create_target_group(self):
-        """Crear grupo de punto objetivo"""
-        group = QGroupBox("🎯 Punto Objetivo")
-        group.setFont(QFont("Arial", 10, QFont.Bold))
-        group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                border: 2px solid #3498db;
-                border-radius: 8px;
-                margin-top: 10px;
-                padding-top: 10px;
-                background-color: #f8f9fa;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px 0 5px;
-                color: #2980b9;
-            }
-        """)
-        
-        layout = QVBoxLayout(group)
-        layout.setSpacing(10)
+        target_group = QGroupBox("Punto Objetivo")
+        target_layout = QVBoxLayout(target_group)
         
         # Grid para coordenadas
         coord_grid = QGridLayout()
-        coord_grid.setSpacing(8)
-        
         self.x_input = QLineEdit("2.0")
         self.y_input = QLineEdit("1.0")
         self.z_input = QLineEdit("2.0")
-        
-        # Estilo para los campos de entrada
-        input_style = """
-            QLineEdit {
-                padding: 8px;
-                border: 2px solid #bdc3c7;
-                border-radius: 5px;
-                background-color: white;
-                font-size: 12px;
-            }
-            QLineEdit:focus {
-                border-color: #3498db;
-                background-color: #f8f9fa;
-            }
-        """
-        self.x_input.setStyleSheet(input_style)
-        self.y_input.setStyleSheet(input_style)
-        self.z_input.setStyleSheet(input_style)
         
         coord_grid.addWidget(QLabel("X:"), 0, 0)
         coord_grid.addWidget(self.x_input, 0, 1)
@@ -183,58 +294,18 @@ class ArmWindow(QMainWindow):
         coord_grid.addWidget(QLabel("Z:"), 2, 0)
         coord_grid.addWidget(self.z_input, 2, 1)
         
-        layout.addLayout(coord_grid)
+        target_layout.addLayout(coord_grid)
         
         # Botón de visualización
-        self.visualize_btn = QPushButton("🚀 Visualizar Movimiento")
-        self.visualize_btn.setFont(QFont("Arial", 11, QFont.Bold))
-        self.visualize_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #27ae60;
-                color: white;
-                border: none;
-                padding: 12px;
-                border-radius: 6px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #2ecc71;
-            }
-            QPushButton:pressed {
-                background-color: #229954;
-            }
-            QPushButton:disabled {
-                background-color: #95a5a6;
-            }
-        """)
+        self.visualize_btn = QPushButton("Visualizar Movimiento")
         self.visualize_btn.clicked.connect(self.start_visualization)
-        layout.addWidget(self.visualize_btn)
+        target_layout.addWidget(self.visualize_btn)
         
-        return group
+        controls_layout.addWidget(target_group)
         
-    def create_angle_group(self):
-        """Crear grupo de control de ángulos"""
-        group = QGroupBox("🎛️ Control de Ángulos")
-        group.setFont(QFont("Arial", 10, QFont.Bold))
-        group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                border: 2px solid #e74c3c;
-                border-radius: 8px;
-                margin-top: 10px;
-                padding-top: 10px;
-                background-color: #f8f9fa;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px 0 5px;
-                color: #c0392b;
-            }
-        """)
-        
-        layout = QVBoxLayout(group)
-        layout.setSpacing(8)
+        # Grupo: Control de Ángulos
+        angle_group = QGroupBox("Control de Ángulos")
+        angle_layout = QVBoxLayout(angle_group)
         
         # Sliders para los 6 ángulos
         self.angle_sliders = {}
@@ -251,133 +322,60 @@ class ArmWindow(QMainWindow):
         
         for angle_name, angle_symbol, min_val, max_val in angles:
             slider_layout = QHBoxLayout()
-            slider_layout.setSpacing(5)
             
             # Etiqueta del ángulo
             label = QLabel(f"{angle_symbol}:")
-            label.setFont(QFont("Arial", 10))
-            label.setMinimumWidth(30)
             slider_layout.addWidget(label)
             
             # Slider
             slider = QSlider(Qt.Horizontal)
             slider.setRange(min_val, max_val)
             slider.setValue(0)
-            slider.setStyleSheet("""
-                QSlider::groove:horizontal {
-                    border: 1px solid #bdc3c7;
-                    height: 8px;
-                    background: #ecf0f1;
-                    border-radius: 4px;
-                }
-                QSlider::handle:horizontal {
-                    background: #e74c3c;
-                    border: 1px solid #c0392b;
-                    width: 18px;
-                    margin: -2px 0;
-                    border-radius: 9px;
-                }
-                QSlider::handle:horizontal:hover {
-                    background: #c0392b;
-                }
-            """)
             slider.valueChanged.connect(self.update_arm_angles)
             self.angle_sliders[angle_name] = slider
             slider_layout.addWidget(slider)
             
             # Etiqueta de valor
             value_label = QLabel("0°")
-            value_label.setFont(QFont("Arial", 9))
-            value_label.setMinimumWidth(35)
-            value_label.setAlignment(Qt.AlignRight)
             self.angle_labels[angle_name] = value_label
             slider_layout.addWidget(value_label)
             
-            layout.addLayout(slider_layout)
+            angle_layout.addLayout(slider_layout)
             
-        return group
+        controls_layout.addWidget(angle_group)
         
-    def create_info_group(self):
-        """Crear grupo de información"""
-        group = QGroupBox("📊 Información")
-        group.setFont(QFont("Arial", 10, QFont.Bold))
-        group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                border: 2px solid #f39c12;
-                border-radius: 8px;
-                margin-top: 10px;
-                padding-top: 10px;
-                background-color: #f8f9fa;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px 0 5px;
-                color: #d68910;
-            }
-        """)
+        # Grupo: Información
+        info_group = QGroupBox("Información")
+        info_layout = QVBoxLayout(info_group)
         
-        layout = QVBoxLayout(group)
-        layout.setSpacing(8)
+        self.current_pos_label = QLabel("Posición actual: (0.00, 0.00, 0.00)")
+        self.target_pos_label = QLabel("Objetivo: (2.00, 1.00, 2.00)")
+        self.distance_label = QLabel("Distancia: 0.00")
+        self.status_label = QLabel("Estado: Listo")
         
-        # Estilo para las etiquetas de información
-        info_style = """
-            QLabel {
-                padding: 5px;
-                border-radius: 3px;
-                background-color: #ecf0f1;
-                border: 1px solid #bdc3c7;
-                font-size: 10px;
-            }
-        """
-        
-        self.current_pos_label = QLabel("📍 Posición actual: (0.00, 0.00, 0.00)")
-        self.current_pos_label.setStyleSheet(info_style)
-        layout.addWidget(self.current_pos_label)
-        
-        self.target_pos_label = QLabel("🎯 Objetivo: (2.00, 1.00, 2.00)")
-        self.target_pos_label.setStyleSheet(info_style)
-        layout.addWidget(self.target_pos_label)
-        
-        self.distance_label = QLabel("📏 Distancia: 0.00")
-        self.distance_label.setStyleSheet(info_style)
-        layout.addWidget(self.distance_label)
-        
-        self.status_label = QLabel("✅ Estado: Listo")
-        self.status_label.setStyleSheet(info_style)
-        layout.addWidget(self.status_label)
+        info_layout.addWidget(self.current_pos_label)
+        info_layout.addWidget(self.target_pos_label)
+        info_layout.addWidget(self.distance_label)
+        info_layout.addWidget(self.status_label)
         
         # Botones de control
-        button_style = """
-            QPushButton {
-                background-color: #3498db;
-                color: white;
-                border: none;
-                padding: 8px;
-                border-radius: 4px;
-                font-weight: bold;
-                font-size: 10px;
-            }
-            QPushButton:hover {
-                background-color: #2980b9;
-            }
-            QPushButton:pressed {
-                background-color: #21618c;
-            }
-        """
-        
-        reset_arm_btn = QPushButton("🔄 Reset Brazo")
-        reset_arm_btn.setStyleSheet(button_style)
+        reset_arm_btn = QPushButton("Reset Brazo")
         reset_arm_btn.clicked.connect(self.reset_arm)
-        layout.addWidget(reset_arm_btn)
+        info_layout.addWidget(reset_arm_btn)
         
-        reset_view_btn = QPushButton("👁️ Reset Vista")
-        reset_view_btn.setStyleSheet(button_style)
+        reset_view_btn = QPushButton("Reset Vista")
         reset_view_btn.clicked.connect(self.gl_widget.reset_view)
-        layout.addWidget(reset_view_btn)
+        info_layout.addWidget(reset_view_btn)
         
-        return group
+        controls_layout.addWidget(info_group)
+        
+        # Conectar señales
+        self.x_input.textChanged.connect(self.update_target_info)
+        self.y_input.textChanged.connect(self.update_target_info)
+        self.z_input.textChanged.connect(self.update_target_info)
+        
+        # Actualizar información inicial
+        self.update_target_info()
         
     def init_arm(self):
         """Inicializar el brazo robótico"""
@@ -444,7 +442,7 @@ class ArmWindow(QMainWindow):
             self.update_info_display()
             
         except Exception as e:
-            self.status_label.setText(f"❌ Estado: Error - {str(e)}")
+            self.status_label.setText(f"Estado: Error - {str(e)}")
             
     def update_target_info(self):
         """Actualizar información del punto objetivo"""
@@ -453,7 +451,7 @@ class ArmWindow(QMainWindow):
             y = float(self.y_input.text() or "0")
             z = float(self.z_input.text() or "0")
             
-            self.target_pos_label.setText(f"🎯 Objetivo: ({x:.2f}, {y:.2f}, {z:.2f})")
+            self.target_pos_label.setText(f"Objetivo: ({x:.2f}, {y:.2f}, {z:.2f})")
             
             # Actualizar punto objetivo en visualización
             self.gl_widget.set_target_point(x, y, z)
@@ -462,11 +460,11 @@ class ArmWindow(QMainWindow):
             if self.arm:
                 final_pos = self.arm.getArmFinalPoint()
                 distance = ((final_pos['x'] - x)**2 + (final_pos['y'] - y)**2 + (final_pos['z'] - z)**2)**0.5
-                self.distance_label.setText(f"📏 Distancia: {distance:.2f}")
+                self.distance_label.setText(f"Distancia: {distance:.2f}")
                 
         except ValueError:
-            self.target_pos_label.setText("🎯 Objetivo: (inválido)")
-            self.distance_label.setText("📏 Distancia: N/A")
+            self.target_pos_label.setText("Objetivo: (inválido)")
+            self.distance_label.setText("Distancia: N/A")
             
     def update_info_display(self):
         """Actualizar toda la información mostrada"""
@@ -475,7 +473,7 @@ class ArmWindow(QMainWindow):
             
         try:
             final_pos = self.arm.getArmFinalPoint()
-            self.current_pos_label.setText(f"📍 Posición actual: ({final_pos['x']:.2f}, {final_pos['y']:.2f}, {final_pos['z']:.2f})")
+            self.current_pos_label.setText(f"Posición actual: ({final_pos['x']:.2f}, {final_pos['y']:.2f}, {final_pos['z']:.2f})")
             
             # Actualizar distancia
             try:
@@ -483,13 +481,13 @@ class ArmWindow(QMainWindow):
                 y = float(self.y_input.text() or "0")
                 z = float(self.z_input.text() or "0")
                 distance = ((final_pos['x'] - x)**2 + (final_pos['y'] - y)**2 + (final_pos['z'] - z)**2)**0.5
-                self.distance_label.setText(f"📏 Distancia: {distance:.2f}")
+                self.distance_label.setText(f"Distancia: {distance:.2f}")
             except ValueError:
-                self.distance_label.setText("📏 Distancia: N/A")
+                self.distance_label.setText("Distancia: N/A")
                 
         except Exception as e:
-            self.current_pos_label.setText("📍 Posición actual: Error")
-            self.distance_label.setText("📏 Distancia: Error")
+            self.current_pos_label.setText("Posición actual: Error")
+            self.distance_label.setText("Distancia: Error")
             
     def start_visualization(self):
         """Iniciar visualización del movimiento hacia el punto objetivo"""
@@ -506,11 +504,11 @@ class ArmWindow(QMainWindow):
             
             # Verificar si el punto es alcanzable
             if not arm_solver.is_possible_shot():
-                self.status_label.setText("❌ Estado: Punto fuera del alcance")
+                self.status_label.setText("Estado: Punto fuera del alcance")
                 QMessageBox.warning(self, "Advertencia", "El punto objetivo está fuera del alcance del brazo")
                 return
                 
-            self.status_label.setText("🔄 Estado: Calculando movimiento...")
+            self.status_label.setText("Estado: Calculando movimiento...")
             self.visualize_btn.setEnabled(False)
             
             # Crear y ejecutar thread de animación
@@ -521,10 +519,10 @@ class ArmWindow(QMainWindow):
             self.animation_thread.start()
             
         except ValueError:
-            self.status_label.setText("❌ Estado: Valores inválidos")
+            self.status_label.setText("Estado: Valores inválidos")
             QMessageBox.warning(self, "Error", "Por favor ingresa valores numéricos válidos")
         except Exception as e:
-            self.status_label.setText(f"❌ Estado: Error - {str(e)}")
+            self.status_label.setText(f"Estado: Error - {str(e)}")
             QMessageBox.critical(self, "Error", f"Error al iniciar visualización: {str(e)}")
             
     def update_animation_progress(self, solution):
@@ -556,17 +554,17 @@ class ArmWindow(QMainWindow):
             self.update_info_display()
             
         except Exception as e:
-            self.status_label.setText(f"❌ Estado: Error en animación - {str(e)}")
+            self.status_label.setText(f"Estado: Error en animación - {str(e)}")
             
     def animation_finished(self, solution):
         """Animación completada"""
-        self.status_label.setText("✅ Estado: Movimiento completado")
+        self.status_label.setText("Estado: Movimiento completado")
         self.visualize_btn.setEnabled(True)
         self.update_animation_progress(solution)
         
     def animation_error(self, error_msg):
         """Error en la animación"""
-        self.status_label.setText(f"❌ Estado: Error - {error_msg}")
+        self.status_label.setText(f"Estado: Error - {error_msg}")
         self.visualize_btn.setEnabled(True)
         QMessageBox.warning(self, "Error", error_msg)
         
@@ -578,11 +576,11 @@ def main():
     """Función principal"""
     app = QApplication(sys.argv)
     
-    # Configurar estilo global
+    # Configurar estilo
     app.setStyle('Fusion')
     
     # Crear y mostrar ventana
-    window = ArmWindow()
+    window = ArmVisualizerWindow()
     window.show()
     
     # Ejecutar aplicación

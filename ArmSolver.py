@@ -161,11 +161,12 @@ class ArmSolver():
 
     # pArm  {'arm1' : {'alpha' : <alpha>, 'theta' : <theta> }, 'arm2' : {'alpha' : <alpha>, 'theta' : <theta> } , 'arm3' : {'alpha' : <alpha>, 'theta' : <theta> } }
     def combineArmStatus(self, pArm, cArm):
-        combinedResult      = {}
+        combinedResult = {}
         for armKey in pArm:
-            for angleKey in pArm[pKeys]:
+            combinedResult[armKey] = {}
+            for angleKey in pArm[armKey]:
                 # { 'armX' : { 'alpha'  : <crossAngles> }  }
-                combinedResult.update( { armKey : { angleKey :  gs.crossAngles( pArm[armKey][angleKey], pArm[armKey][angleKey] ) } } )
+                combinedResult[armKey][angleKey] = self.gs.crossAngles( pArm[armKey][angleKey], cArm[armKey][angleKey] )
         return combinedResult
 
     def evaluateAnglesGroup(self, anglesArm1, anglesArm2, anglesArm3):
@@ -174,7 +175,7 @@ class ArmSolver():
         return distanceToGoal
 
     def pointsDistance(self, point1, point2):
-        pointDistance = (point1['x'] - point2['x']) ** 2 + (point1['y'] + point2['y']) ** 2 + (point1['z'] + point2['z']) ** 2
+        pointDistance = (point1['x'] - point2['x']) ** 2 + (point1['y'] - point2['y']) ** 2 + (point1['z'] - point2['z']) ** 2
         pointDistance = math.sqrt(pointDistance)
         return pointDistance
 
