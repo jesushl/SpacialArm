@@ -1,53 +1,54 @@
 #!/bin/bash
 
-# Script para ejecutar SpacialArm con ambiente virtual uv
-# Autor: SpacialArm Team
+echo "🚀 Ejecutando Visualizador 3D del Brazo Robótico - MVC"
+echo "=" * 60
 
-echo "🚀 Iniciando SpacialArm - Visualizador 3D del Brazo Robótico"
-echo "=========================================================="
-
-# Verificar si existe el ambiente virtual
+# Verificar si el ambiente virtual existe
 if [ ! -d ".venv" ]; then
-    echo "❌ Ambiente virtual no encontrado. Creando uno nuevo..."
-    uv venv --python python3.12
+    echo "❌ Ambiente virtual no encontrado"
+    echo "   Ejecuta primero: ./install.sh"
+    exit 1
 fi
 
 # Activar ambiente virtual
-echo "📦 Activando ambiente virtual..."
+echo "🔧 Activando ambiente virtual..."
 source .venv/bin/activate
 
-# Verificar si las dependencias están instaladas
-if ! python -c "import PyQt5, OpenGL, numpy" 2>/dev/null; then
-    echo "📥 Instalando dependencias..."
-    uv pip install PyOpenGL PyOpenGL_accelerate PyQt5 numpy
-fi
-
-# Verificar que los archivos necesarios existen
-echo "🔍 Verificando archivos del proyecto..."
-required_files=("window/main.ui" "window/mainInterface.py" "window/glWidget.py" "Arm.py" "Vector.py")
-for file in "${required_files[@]}"; do
-    if [ ! -f "$file" ]; then
-        echo "❌ Error: No se encontró el archivo $file"
-        echo "   Asegúrate de ejecutar este script desde el directorio raíz del proyecto"
-        exit 1
-    fi
-done
-
-# Ejecutar la aplicación
-echo "🎮 Iniciando visualización 3D..."
-echo ""
-echo "Controles de la aplicación:"
-echo "- Mouse izquierdo: Rotar vista"
-echo "- Mouse derecho: Zoom"
-echo "- Rueda del mouse: Zoom"
-echo "- Sliders: Controlar ángulos del brazo"
-echo "- Campos X, Y, Z: Especificar punto objetivo"
-echo ""
-
-# Ejecutar con manejo de errores
-if python main.py; then
-    echo "✅ Aplicación cerrada correctamente"
-else
-    echo "❌ Error al ejecutar la aplicación"
+if [ $? -ne 0 ]; then
+    echo "❌ Error al activar el ambiente virtual"
     exit 1
 fi
+
+# Verificar que main.py existe
+if [ ! -f "main.py" ]; then
+    echo "❌ Error: No se encontró main.py"
+    exit 1
+fi
+
+# Verificar estructura MVC
+echo "🔍 Verificando estructura MVC..."
+if [ ! -d "models" ] || [ ! -d "views" ] || [ ! -d "controllers" ]; then
+    echo "❌ Error: Estructura MVC incompleta"
+    echo "   Verifica que existan los directorios: models/, views/, controllers/"
+    exit 1
+fi
+
+echo "✅ Estructura MVC verificada"
+
+# Ejecutar aplicación
+echo "🎯 Iniciando aplicación..."
+echo ""
+echo "🎮 Controles:"
+echo "   - Mouse izquierdo: Rotar vista 3D"
+echo "   - Rueda del mouse: Zoom in/out"
+echo "   - Sliders: Controlar ángulos del brazo"
+echo "   - Campos X, Y, Z: Especificar punto objetivo"
+echo "   - Botón 'Visualizar Movimiento': Animar hacia el objetivo"
+echo ""
+echo "📐 Distribución:"
+echo "   - 5/8 de la ventana: Visualización 3D (prioritaria)"
+echo "   - 3/8 de la ventana: Controles e información"
+echo ""
+echo "=" * 60
+
+python3 main.py
